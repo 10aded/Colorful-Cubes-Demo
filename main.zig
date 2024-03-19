@@ -28,6 +28,9 @@
 // * Think about data structures so that drawing triangles
 //   just writes info to some buffer, which at a later stage
 //   will be sent off to the GPU.
+// * Start moving / animating the cube.
+// * Create our own custom camera class.
+// * Create our own grid drawing procedure.
 
 const std    = @import("std");
 const rl     = @cImport(@cInclude("raylib.h"));
@@ -40,8 +43,20 @@ const WINDOW_TITLE = "Colorful Cubes Demo";
 
 // Constants
 // Colors
-const BLACK = Color{0x0, 0x0, 0x0, 0xFF};
+const BLACK = Color{0x00, 0x00, 0x00, 0xFF};
 
+// TODO: Adjust these colors.
+const LIGHTGREEN = Color{0x47, 0x77, 0x54, 255};
+const DARKGREEN  = Color{0x21, 0x3b, 0x25, 255};
+const LIGHTBLUE  = Color{0xc0, 0xd1, 0xcc, 255};
+const GRAYBLUE   = Color{0x65, 0x73, 0x8c, 255};
+const BROWN      = Color{0x77, 0x5c, 0x4f, 255};
+const YELLOW2    = Color{0xf5, 0xcf, 0x13, 255};
+
+const MAGENTA = Color{0xFF, 0x00, 0xFF, 0xFF};
+const DEBUG = MAGENTA;
+
+const BLACK2     = Color{0x17, 0x0e, 0x19, 255};
 
 // Window
 const initial_screen_width  = 1080;
@@ -63,16 +78,7 @@ pub fn main() void {
     // Attempt to make GPU not burn to 100%.
     rl.SetConfigFlags(rl.FLAG_VSYNC_HINT);
 
-    //     typedef struct Camera3D {
-    // Vector3 position;       // Camera position
-    // Vector3 target;         // Camera target it looks-at
-    // Vector3 up;             // Camera up vector (rotation over its axis)
-    // float fovy;             // Camera field-of-view aperture in Y (degrees) in perspective, used as near plane width in orthographic
-    // int projection;         // Camera projection: CAMERA_PERSPECTIVE or CAMERA_ORTHOGRAPHIC
-    // } Camera3D;
-
-
-    const camera_position = Vec3{10,10,10};
+    const camera_position = Vec3{-10,-10,-10};
         
     // Define the camera to look into our 3d world
     var camera : rl.Camera3D = undefined;
@@ -98,11 +104,9 @@ pub fn main() void {
 
         // Draw a grid.
         rl.DrawGrid(10, 1);
-        
-        const p1 = vec3_to_rl(test_triangle[0]);
-        const p2 = vec3_to_rl(test_triangle[1]);
-        const p3 = vec3_to_rl(test_triangle[2]);
-        rl.DrawTriangle3D(p1, p2, p3, rlc(BLACK));
+
+        const pos1 = Vec3{2,0,3};
+        render_colored_cube(cube1, pos1);
         
         rl.EndMode3D();
         
@@ -123,4 +127,80 @@ fn vec3_to_rl(vec : Vec3) rl.Vector3 {
         .z = vec[2],
     };
     return dumb_rl_tl_vec3;
+}
+
+// In the procedure below,
+//
+//    C2
+//  C5C1C3C6
+//    C4
+//
+// C1 represents the top face of the cube, C2 is pointing "north"
+const Cube = [6] Color;
+
+const cube1 = Cube{
+    LIGHTGREEN,
+    DARKGREEN,
+    LIGHTBLUE,
+    GRAYBLUE,
+    BROWN,
+    YELLOW2,
+};
+
+fn render_colored_cube( cube : Cube, pos : Vec3) void {
+    // Compute the 8 nodes of the cube.
+    // pXYZ = Vec{X,Y,Z};
+    const p000 = Vec3{0,0,0} + pos;
+    const p001 = Vec3{0,0,1} + pos;
+    const p010 = Vec3{0,1,0} + pos;
+    const p011 = Vec3{0,1,1} + pos;
+    const p100 = Vec3{1,0,0} + pos;
+    const p101 = Vec3{1,0,1} + pos;
+    const p110 = Vec3{1,1,0} + pos;
+    const p111 = Vec3{1,1,1} + pos;
+    
+    // Compute 12 triangles (including their colors) which
+    // when drawn, will draw the cube.
+
+    const c1ta = Triangle{.p1 = p001, .p2 = p011, .p3 = p111, .color = cube[0]};
+    const c1tb = Triangle{.p1 = p001, .p2 = p101, .p3 = p111, .color = cube[0]};
+    const c2ta = Triangle{.p1 = p010, .p2 = p011, .p3 = p111, .color = cube[1]};
+    const c2tb = Triangle{.p1 = p010, .p2 = p110, .p3 = p111, .color = cube[1]};
+    const c3ta = Triangle{.p1 = p100, .p2 = p101, .p3 = p111, .color = cube[2]};
+    const c3tb = Triangle{.p1 = p100, .p2 = p110, .p3 = p111, .color = cube[2]};
+    const c4ta = Triangle{.p1 = p000, .p2 = p001, .p3 = p101, .color = cube[3]};
+    const c4tb = Triangle{.p1 = p000, .p2 = p100, .p3 = p101, .color = cube[3]};
+    const c5ta = Triangle{.p1 = p000, .p2 = p001, .p3 = p011, .color = cube[4]};
+    const c5tb = Triangle{.p1 = p000, .p2 = p010, .p3 = p011, .color = cube[4]};
+    const c6ta = Triangle{.p1 = p000, .p2 = p010, .p3 = p110, .color = cube[5]};
+    const c6tb = Triangle{.p1 = p000, .p2 = p100, .p3 = p110, .color = cube[5]};
+
+    const triangles = [12] Triangle{
+        c1ta, c1tb,
+        c2ta, c2tb,
+        c3ta, c3tb,
+        c4ta, c4tb,
+        c5ta, c5tb,
+        c6ta, c6tb,
+    };
+
+    // Draw triangles.
+    for (triangles) |triangle| {
+        draw_triangle(triangle);
+    }
+}
+
+const Triangle = struct{
+    p1 : Vec3,
+    p2 : Vec3,
+    p3 : Vec3,
+    color : Color,
+};
+
+fn draw_triangle(triangle : Triangle) void {
+    const p1 = vec3_to_rl(triangle.p1);
+    const p2 = vec3_to_rl(triangle.p2);
+    const p3 = vec3_to_rl(triangle.p3);
+    rl.DrawTriangle3D(p1, p2, p3, rlc(triangle.color));
+    rl.DrawTriangle3D(p2, p1, p3, rlc(triangle.color));
 }
