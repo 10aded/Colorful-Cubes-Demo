@@ -26,6 +26,8 @@
 
 // TODO:
 // * Start moving / animating the cube.
+// * @maybe: Simplify the linear algebra calculations using 
+//   @Vector3 types...
 // * Think about data structures so that drawing triangles
 //   just writes info to some buffer, which at a later stage
 //   will be sent off to the GPU.
@@ -49,13 +51,21 @@ var camera : rl.Camera3D = undefined;
 
 
 // Keyboard
-var left_key_down            : bool = false;
-var left_key_down_last_frame : bool = false;
-
+var left_key_down             : bool = false;
+var left_key_down_last_frame  : bool = false;
+var right_key_down            : bool = false;
+var right_key_down_last_frame : bool = false;
+var up_key_down               : bool = false;
+var up_key_down_last_frame    : bool = false;
+var down_key_down             : bool = false;
+var down_key_down_last_frame  : bool = false;
 
 // Constants
 // Colors
 const BLACK = Color{0x00, 0x00, 0x00, 0xFF};
+const RED   = Color{0xFF, 0x00, 0x00, 0xFF};
+const GREEN = Color{0x00, 0xFF, 0x00, 0xFF};
+const BLUE  = Color{0x00, 0x00, 0xFF, 0xFF};
 
 // Matrices
 var main_cube_rot = id;
@@ -72,6 +82,8 @@ const rotx90 = mat33i8{
     .{0, 1,  0},
 };
 
+const rotx270 = matmul(matmul(rotx90, rotx90), rotx90);
+
 const roty90 = mat33i8{
     .{0, 0, -1},
     .{0, 1, 0},
@@ -83,6 +95,8 @@ const rotz90 = mat33i8 {
     .{1,  0, 0},
     .{0,  0, 1},
 };
+
+const rotz270 = matmul(matmul(rotz90, rotz90), rotz90);
 
 fn matmul(mat1 : mat33i8, mat2 : mat33i8) mat33i8 {
     var ret : mat33i8 = undefined;
@@ -196,18 +210,30 @@ fn process_input_update_state() void {
     // up    arrow: rotz90
     // down  arrow: rotz270
 
-    // 
+    // Check to see how pressed keys are.
     left_key_down_last_frame = left_key_down;
     left_key_down = rl.IsKeyDown(rl.KEY_LEFT);
-
-    // TODO...
-    // KEY_RIGHT           = 262,      // Key: Cursor right
-    // KEY_LEFT            = 263,      // Key: Cursor left
-    // KEY_DOWN            = 264,      // Key: Cursor down
-    // KEY_UP              = 265,      // Key: Cursor up
+    right_key_down_last_frame = right_key_down;
+    right_key_down = rl.IsKeyDown(rl.KEY_RIGHT);
+    up_key_down_last_frame = up_key_down;
+    up_key_down = rl.IsKeyDown(rl.KEY_UP);    
+    down_key_down_last_frame = down_key_down;
+    down_key_down = rl.IsKeyDown(rl.KEY_DOWN);    
 
     if (left_key_down and ! left_key_down_last_frame) {
-        main_cube_rot = matmul(main_cube_rot, rotx90);
+        main_cube_rot = matmul(rotx90, main_cube_rot);
+    }
+
+    if (right_key_down and ! right_key_down_last_frame) {
+        main_cube_rot = matmul(rotx270, main_cube_rot);
+    }
+
+    if (up_key_down and ! up_key_down_last_frame) {
+        main_cube_rot = matmul(rotz90, main_cube_rot);
+    }
+
+    if (down_key_down and ! down_key_down_last_frame) {
+        main_cube_rot = matmul(rotz270, main_cube_rot);
     }
 
     // @debug
@@ -225,11 +251,17 @@ fn render() void {
     // Draw a grid.
     rl.DrawGrid(10, 1);
 
+
     const pos1 = Vec3{2,0,2};
     
     const cube_rotation = mat33i8_to_mat33f32(main_cube_rot);
     render_cube(cube1, pos1, cube_rotation);
 
+    // @debug
+    render_cube(red_cube,   UNITX, mat33i8_to_mat33f32(id));
+    render_cube(green_cube, UNITY, mat33i8_to_mat33f32(id));
+    render_cube(blue_cube,  UNITZ, mat33i8_to_mat33f32(id));
+    
     rl.EndMode3D();
 
     defer rl.EndDrawing();
@@ -268,6 +300,33 @@ const cube1 = Cube{
     YELLOW2,
 };
 
+
+const red_cube = Cube{
+    RED,
+    RED,
+    RED,
+    RED,
+    RED,
+    RED,
+};
+
+const green_cube = Cube{
+    GREEN,
+    GREEN,
+    GREEN,
+    GREEN,
+    GREEN,
+    GREEN,
+};
+
+const blue_cube = Cube{
+    BLUE,
+    BLUE,
+    BLUE,
+    BLUE,
+    BLUE,
+    BLUE,
+};
 
 fn render_cube( cube : Cube, pos : Vec3 , rot : mat33f32) void {
     // Compute the 8 nodes of the cube.
