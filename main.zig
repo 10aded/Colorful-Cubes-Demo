@@ -25,25 +25,106 @@
 // See the pages above for full license details.
 
 // TODO:
+// * Start moving / animating the cube.
 // * Think about data structures so that drawing triangles
 //   just writes info to some buffer, which at a later stage
 //   will be sent off to the GPU.
-// * Start moving / animating the cube.
 // * Create our own custom camera class.
 // * Create our own grid drawing procedure.
+// * Make tests for matrix multiplication.
 
 const std    = @import("std");
 const rl     = @cImport(@cInclude("raylib.h"));
 
+const mat33i8  = [3][3] i8;
+const mat33f32 = [3][3] f32;
 const Vec3  = @Vector(3, f32);
 const Color = [4] u8;
     
 // Globals
 const WINDOW_TITLE = "Colorful Cubes Demo";
 
+// Camera
+var camera : rl.Camera3D = undefined;
+
+
+// Keyboard
+var left_key_down            : bool = false;
+var left_key_down_last_frame : bool = false;
+
+
 // Constants
 // Colors
 const BLACK = Color{0x00, 0x00, 0x00, 0xFF};
+
+// Matrices
+var main_cube_rot = id;
+
+const id = mat33i8{
+    .{1, 0, 0},
+    .{0, 1, 0},
+    .{0, 0, 1},
+};
+
+const rotx90 = mat33i8{
+    .{1, 0,  0},
+    .{0, 0, -1},
+    .{0, 1,  0},
+};
+
+const roty90 = mat33i8{
+    .{0, 0, -1},
+    .{0, 1, 0},
+    .{1, 0,  1},
+};
+
+const rotz90 = mat33i8 {
+    .{0, -1, 0},
+    .{1,  0, 0},
+    .{0,  0, 1},
+};
+
+fn matmul(mat1 : mat33i8, mat2 : mat33i8) mat33i8 {
+    var ret : mat33i8 = undefined;
+    for (0..3) |i| {
+        for (0..3) |j| {
+            var sum : i8 = 0;
+            for (0..3) |k| {
+                sum += mat1[i][k] * mat2[k][j];
+            }
+            ret[i][j] = sum;
+        }
+    }
+    return ret;
+}
+
+fn matvecmul(mat : mat33f32, vec : Vec3) Vec3 {
+    var ret : Vec3 = undefined;
+    for (0..3) |i| {
+        ret[i] = mat[i][0] * vec[0] + mat[i][1] * vec[1] + mat[i][2] * vec[2];
+    }
+    return ret;
+}
+
+fn matsclmul(scalar : f32, mat : mat33f32) mat33f32 {
+    var ret = mat;
+    for (0..3) |i| {
+        for (0..3) |j| {
+            ret[i][j] *= scalar;
+        }
+    }
+    return ret;
+}
+
+fn mat33i8_to_mat33f32(mat : mat33i8) mat33f32 {
+    var ret : mat33f32 = undefined;
+    for (0..3) |i| {
+        for (0..3) |j| {
+            ret[i][j] = @floatFromInt(mat[i][j]);
+        }
+    }
+    return ret;
+}
 
 // TODO: Adjust these colors.
 const LIGHTGREEN = Color{0x47, 0x77, 0x54, 255};
@@ -75,13 +156,19 @@ const test_p3 = Vec3{1, 1, 0};
 const test_triangle = [3]Vec3{test_p1, test_p2, test_p3};
 
 pub fn main() void {
+
+    //@debug
+    const vec1 = Vec3{1,2,3};
+    const vec2 = Vec3{0,4,1};
+    const test1 = vec1 * vec2 == Vec3{0, 8, 3};
+    std.debug.print("{any}\n", .{test1});
+    
     // Attempt to make GPU not burn to 100%.
     rl.SetConfigFlags(rl.FLAG_VSYNC_HINT);
 
-    const camera_position = Vec3{-10,-10,-10};
+    const camera_position = Vec3{10,10,10};
         
     // Define the camera to look into our 3d world
-    var camera : rl.Camera3D = undefined;
     camera.position = vec3_to_rl(camera_position);
     camera.target = vec3_to_rl(ORIGIN);
     camera.up = vec3_to_rl(UNITY);
@@ -96,22 +183,56 @@ pub fn main() void {
     rl.SetTargetFPS(144);
 
     while ( ! rl.WindowShouldClose() ) { // Listen for close button or ESC key.
-        rl.BeginDrawing();
 
-        rl.ClearBackground(rlc(BLACK));
-
-        rl.BeginMode3D(camera);
-
-        // Draw a grid.
-        rl.DrawGrid(10, 1);
-
-        const pos1 = Vec3{2,0,3};
-        render_colored_cube(cube1, pos1);
-        
-        rl.EndMode3D();
-        
-        defer rl.EndDrawing();
+        process_input_update_state();
+        render();
     }
+}
+
+fn process_input_update_state() void {
+    // @debug
+    // left  arrow: rotx90
+    // right arrow: rotx270
+    // up    arrow: rotz90
+    // down  arrow: rotz270
+
+    // 
+    left_key_down_last_frame = left_key_down;
+    left_key_down = rl.IsKeyDown(rl.KEY_LEFT);
+
+    // TODO...
+    // KEY_RIGHT           = 262,      // Key: Cursor right
+    // KEY_LEFT            = 263,      // Key: Cursor left
+    // KEY_DOWN            = 264,      // Key: Cursor down
+    // KEY_UP              = 265,      // Key: Cursor up
+
+    if (left_key_down and ! left_key_down_last_frame) {
+        main_cube_rot = matmul(main_cube_rot, rotx90);
+    }
+
+    // @debug
+//    std.debug.print("{any}\n", .{main_cube_rot});
+}
+
+
+fn render() void {
+    rl.BeginDrawing();
+
+    rl.ClearBackground(rlc(BLACK));
+
+    rl.BeginMode3D(camera);
+
+    // Draw a grid.
+    rl.DrawGrid(10, 1);
+
+    const pos1 = Vec3{2,0,2};
+    
+    const cube_rotation = mat33i8_to_mat33f32(main_cube_rot);
+    render_cube(cube1, pos1, cube_rotation);
+
+    rl.EndMode3D();
+
+    defer rl.EndDrawing();
 }
 
 // Convert our color data type to raylib's color data type.
@@ -147,17 +268,29 @@ const cube1 = Cube{
     YELLOW2,
 };
 
-fn render_colored_cube( cube : Cube, pos : Vec3) void {
+
+fn render_cube( cube : Cube, pos : Vec3 , rot : mat33f32) void {
     // Compute the 8 nodes of the cube.
     // pXYZ = Vec{X,Y,Z};
-    const p000 = Vec3{0,0,0} + pos;
-    const p001 = Vec3{0,0,1} + pos;
-    const p010 = Vec3{0,1,0} + pos;
-    const p011 = Vec3{0,1,1} + pos;
-    const p100 = Vec3{1,0,0} + pos;
-    const p101 = Vec3{1,0,1} + pos;
-    const p110 = Vec3{1,1,0} + pos;
-    const p111 = Vec3{1,1,1} + pos;
+    const c000 = Vec3{-1, -1, -1};
+    const c001 = Vec3{-1, -1,  1};
+    const c010 = Vec3{-1,  1, -1};
+    const c011 = Vec3{-1,  1,  1};
+    const c100 = Vec3{ 1, -1, -1};
+    const c101 = Vec3{ 1, -1,  1};
+    const c110 = Vec3{ 1,  1, -1};
+    const c111 = Vec3{ 1,  1,  1};
+
+    const rot2 = matsclmul(0.5, rot);
+    // Rotate the cube nodes by rot;
+    const p000 =  matvecmul(rot2, c000) + pos;
+    const p001 =  matvecmul(rot2, c001) + pos;
+    const p010 =  matvecmul(rot2, c010) + pos;
+    const p011 =  matvecmul(rot2, c011) + pos;
+    const p100 =  matvecmul(rot2, c100) + pos;
+    const p101 =  matvecmul(rot2, c101) + pos;
+    const p110 =  matvecmul(rot2, c110) + pos;
+    const p111 =  matvecmul(rot2, c111) + pos;
     
     // Compute 12 triangles (including their colors) which
     // when drawn, will draw the cube.
@@ -204,3 +337,11 @@ fn draw_triangle(triangle : Triangle) void {
     rl.DrawTriangle3D(p1, p2, p3, rlc(triangle.color));
     rl.DrawTriangle3D(p2, p1, p3, rlc(triangle.color));
 }
+
+
+    // var mat = rotx90;
+    // var i : usize = 0;
+    // while (i <= 4) : (i += 1) {
+    //     std.debug.print("{any}\n", .{mat});
+    //     mat = matmul(mat,rotx90);
+    // }
