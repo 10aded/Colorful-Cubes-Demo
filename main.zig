@@ -72,6 +72,7 @@ var cube_posf32 : Vec3 = undefined;
 // Animation
 var   animation_type      = ANIMATION_TYPE.UP;
 const ANIMATION_TIME      = 0.2;
+var   animation_matrix : mat33f32 = undefined;
 
 // Keyboard
 var left_key_down             : bool = false;
@@ -150,6 +151,20 @@ fn matmul(mat1 : mat33i8, mat2 : mat33i8) mat33i8 {
     for (0..3) |i| {
         for (0..3) |j| {
             var sum : i8 = 0;
+            for (0..3) |k| {
+                sum += mat1[i][k] * mat2[k][j];
+            }
+            ret[i][j] = sum;
+        }
+    }
+    return ret;
+}
+
+fn matmulf32(mat1 : mat33f32, mat2 : mat33f32) mat33f32 {
+    var ret : mat33f32 = undefined;
+    for (0..3) |i| {
+        for (0..3) |j| {
+            var sum : f32 = 0;
             for (0..3) |k| {
                 sum += mat1[i][k] * mat2[k][j];
             }
@@ -258,17 +273,6 @@ pub fn main() anyerror!void {
         process_input_update_state();
 
 
-        // Set the translation animation direction.
-        const animation_direction = switch (animation_type) {
-            .UP    => Vec3{1,0,0},
-            .DOWN  => Vec3{-1,0,0},
-            .LEFT  => Vec3{0,0,-1},
-            .RIGHT => Vec3{0,0,1},
-        };
-
-        // Set the rotation animation direction.
-        
-        
         const elapsed_time_nano = stopwatch.read();
         const elapsed_time_secs_f64 = @as(f64, @floatFromInt(elapsed_time_nano)) / @as(f64, std.time.ns_per_s);
         const elapsed_time_secs = @as(f32, @floatCast(elapsed_time_secs_f64));
@@ -281,13 +285,29 @@ pub fn main() anyerror!void {
 
         // TODO... Put this code somewhere sensible.
         // Depending on the animation_fraction, offset the position of the cube.
-        const afv : Vec3 = @splat(1 - animation_fraction);
-        const animation_offset =  afv * animation_direction;
-        cube_posf32 += animation_offset;
+        // Set the translation animation direction.
+        const animation_direction = switch (animation_type) {
+            .UP    => Vec3{1,0,0},
+            .DOWN  => Vec3{-1,0,0},
+            .LEFT  => Vec3{0,0,-1},
+            .RIGHT => Vec3{0,0,1},
+        };
 
         // Calculate cube animation rotation.
         const theta = (1 - animation_fraction) * 0.5 * pi;
-        std.debug.print("theta: {}\n", .{theta}); // @debug
+//        std.debug.print("theta: {}\n", .{theta}); // @debug
+        
+        // Set the rotation animation matrix.
+        animation_matrix = switch(animation_type) {
+            .UP    => matzrottheta(-theta),
+            .DOWN  => matzrottheta(theta),
+            .LEFT  => matxrottheta(-theta),
+            .RIGHT => matxrottheta(theta),
+        };
+
+        const afv : Vec3 = @splat(1 - animation_fraction);
+        const animation_offset =  afv * animation_direction;
+        cube_posf32 += animation_offset;
         
         render();
     }
@@ -356,7 +376,8 @@ fn render() void {
     rl.DrawGrid(10, 1);
 
 
-    const cube_rotation = mat33i8_to_mat33f32(main_cube_rot);
+    const final_cube_rotation = mat33i8_to_mat33f32(main_cube_rot);
+    const cube_rotation = matmulf32(animation_matrix, final_cube_rotation);
 
     render_cube(cube1, cube_posf32, cube_rotation);
 
