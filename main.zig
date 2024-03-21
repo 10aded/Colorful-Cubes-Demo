@@ -25,12 +25,7 @@
 // See the pages above for full license details.
 
 // TODO:
-// * Start moving / animating the cube.
-// * @maybe: Simplify the linear algebra calculations using 
-//   @Vector3 types...
-// * Think about data structures so that drawing triangles
-//   just writes info to some buffer, which at a later stage
-//   will be sent off to the GPU.
+// * Make the translation animation for the cube go along an arc; adjust animation_direction.
 
 const std    = @import("std");
 const rl     = @cImport(@cInclude("raylib.h"));
@@ -248,12 +243,11 @@ pub fn main() anyerror!void {
     // Attempt to make GPU not burn to 100%.
     rl.SetConfigFlags(rl.FLAG_VSYNC_HINT);
 
-    const initial_camera_position = Vec3{10,10,10};
+    const initial_camera_position = Vec3{10,4,1};
 
     // Start the timer (used in animations).
     stopwatch = try std.time.Timer.start();
 
-    
     // Define the camera to look into our 3d world
     camera.position = vec3_to_rl(initial_camera_position);
     camera.target = vec3_to_rl(ORIGIN);
@@ -283,6 +277,10 @@ pub fn main() anyerror!void {
         // @floatFromInt doesn't work on vectors in Zig v.0.11.0, this has been fixed in v.0.12.dev
         cube_posf32 = Vec3{@floatFromInt(cube_pos[0]), @floatFromInt(cube_pos[1]), @floatFromInt(cube_pos[2])};
 
+        // TODO: Replace animation_direction below with something that computes
+        // the correct animation offset (that follows the center of a the cube
+        // on the arc of a circle).
+        
         // TODO... Put this code somewhere sensible.
         // Depending on the animation_fraction, offset the position of the cube.
         // Set the translation animation direction.
