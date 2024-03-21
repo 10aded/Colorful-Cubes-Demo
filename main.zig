@@ -83,6 +83,8 @@ const id = mat33i8{
     .{0, 0, 1},
 };
 
+const idf32 = mat33i8_to_mat33f32(id);
+
 const rotx90 = mat33i8{
     .{1, 0,  0},
     .{0, 0, -1},
@@ -107,7 +109,7 @@ const rotz90 = mat33i8 {
     .{0,  0, 1},
 };
 
-const rotz170 = matmul(rotz90, rotz90);
+const rotz180 = matmul(rotz90, rotz90);
 const rotz270 = matmul(matmul(rotz90, rotz90), rotz90);
 
 fn matmul(mat1 : mat33i8, mat2 : mat33i8) mat33i8 {
@@ -348,38 +350,59 @@ const blue_cube = Cube{
 };
 
 fn render_cube( pos : Vec3 , rot : mat33f32, color : Color) void {
-    // Construct triangles for the top of the cube, and then rotate these
-    // around to get other faces.
-    const c00 = Vec3{ -1, -1,  1};
-    const c01 = Vec3{ -1,  1,  1};
-    const c10 = Vec3{  1, -1,  1};
-    const c11 = Vec3{  1,  1,  1};
+    // Construct triangles for the top of the cube, (and then rotate these
+    // around to get other faces).
+    const edge_color = YELLOW2;
+    const eps = 0.05; // Epsilon
 
-    const triangleA = Triangle{.p1 = c00, .p2 = c10, .p3 = c11, .color = color};
-    const triangleB = Triangle{.p1 = c00, .p2 = c01, .p3 = c11, .color = color};
+    // Points.
+    const f00 = Vec3{ -1 + eps, -1 + eps,  1};
+    const f01 = Vec3{ -1 + eps,  1 - eps,  1};
+    const f10 = Vec3{  1 - eps, -1 + eps,  1};
+    const f11 = Vec3{  1 - eps,  1 - eps,  1};
+    const e00 = Vec3{ -1, -1, 1};
+    const e10 = Vec3{  1, -1, 1};
+    
+    // Face triangles.
+    const triangleA = Triangle{.p1 = f00, .p2 = f10, .p3 = f11, .color = color};
+    const triangleB = Triangle{.p1 = f00, .p2 = f01, .p3 = f11, .color = color};
+    // Edge triangles.
+    const triangleC = Triangle{.p1 = e00, .p2 = f00, .p3 = e10, .color = edge_color};
+    const triangleD = Triangle{.p1 = f00, .p2 = e10, .p3 = f10, .color = edge_color};
 
-    const rotx90f32  = mat33i8_to_mat33f32(rotx90);
-    const rotx180f32 = mat33i8_to_mat33f32(rotx180);
-    const rotx270f32 = mat33i8_to_mat33f32(rotx270);
-    const roty90f32  = mat33i8_to_mat33f32(roty90);
-    const roty270f32 = mat33i8_to_mat33f32(roty270);
+    // Top face edges.
+    const edge_rot_mats = [4] mat33f32 {
+        mat33i8_to_mat33f32(id),
+        mat33i8_to_mat33f32(rotz90),
+        mat33i8_to_mat33f32(rotz180),
+        mat33i8_to_mat33f32(rotz270),
+    };
+    
+    var top_face_edge_triangles : [8] Triangle = undefined;
+    for (0..4) |i| {
+        top_face_edge_triangles[2*i + 0] = mattrimul(edge_rot_mats[i], triangleC);
+        top_face_edge_triangles[2*i + 1] = mattrimul(edge_rot_mats[i], triangleD);
+    }
 
-//    const bt = Triangle{.p1 = ORIGIN, .p2 = ORIGIN, .p3 = ORIGIN, .color = BLACK};
+    const face_rot_mats = [6] mat33f32{
+        mat33i8_to_mat33f32(id),
+        mat33i8_to_mat33f32(rotx90),
+        mat33i8_to_mat33f32(rotx180),
+        mat33i8_to_mat33f32(rotx270),
+        mat33i8_to_mat33f32(roty90),
+        mat33i8_to_mat33f32(roty270),
+    };
+
+    const top_face_triangles = top_face_edge_triangles ++ [2] Triangle{triangleA, triangleB};
+    const tftn = top_face_triangles.len;
     // Rotate the triangles in the top face around to the other positions.
-    var cube_triangles : [12] Triangle = undefined;
-    cube_triangles[0]  = triangleA;
-    cube_triangles[1]  = triangleB;
-    cube_triangles[2]  =  mattrimul(rotx90f32, triangleA);
-    cube_triangles[3]  = mattrimul(rotx90f32, triangleB);
-    cube_triangles[4]  = mattrimul(rotx180f32, triangleA);
-    cube_triangles[5]  = mattrimul(rotx180f32, triangleB);
-    cube_triangles[6]  =  mattrimul(rotx270f32, triangleA);
-    cube_triangles[7]  =  mattrimul(rotx270f32, triangleB);
-    cube_triangles[8]  = mattrimul(roty90f32, triangleA);
-    cube_triangles[9]  = mattrimul(roty90f32, triangleB);
-    cube_triangles[10] = mattrimul(roty270f32, triangleA);
-    cube_triangles[11] = mattrimul(roty270f32, triangleB);
-
+    var cube_triangles : [6 * tftn] Triangle = undefined;
+    for (0..6) |i| {
+        for (top_face_triangles, 0..) |tri, j| {
+            cube_triangles[tftn * i + j] = mattrimul(face_rot_mats[i], tri);
+        }
+    }
+    
     const rot2 = matsclmul(0.5, rot);
 
     // Rotate the triangles by rot, and then offset their position.
@@ -391,7 +414,7 @@ fn render_cube( pos : Vec3 , rot : mat33f32, color : Color) void {
         cube_triangles[i] = ntri;
     }
     
-    // Draw triangles.
+    // Draw face triangles.
     for (cube_triangles) |tri| {
         draw_triangle(tri);
     }
