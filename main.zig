@@ -1,4 +1,4 @@
-// This is a puzzle game about the geometry of cubes.
+// This is simple demo in which a cube rolls on grid, controlled by arrow keys.
 //
 // Created by 10aded Mar 2024 --- ???
 //
@@ -31,9 +31,6 @@
 // * Think about data structures so that drawing triangles
 //   just writes info to some buffer, which at a later stage
 //   will be sent off to the GPU.
-// * Create our own custom camera class.
-// * Create our own grid drawing procedure.
-// * Make tests for matrix multiplication.
 
 const std    = @import("std");
 const rl     = @cImport(@cInclude("raylib.h"));
@@ -42,12 +39,22 @@ const mat33i8  = [3][3] i8;
 const mat33f32 = [3][3] f32;
 const Vec3  = @Vector(3, f32);
 const Color = [4] u8;
-    
+
+
+const Triangle = struct{
+    p1 : Vec3,
+    p2 : Vec3,
+    p3 : Vec3,
+    color : Color,
+};
+
+
 // Globals
 const WINDOW_TITLE = "Colorful Cubes Demo";
 
 // Camera
 var camera : rl.Camera3D = undefined;
+
 
 
 // Keyboard
@@ -82,13 +89,17 @@ const rotx90 = mat33i8{
     .{0, 1,  0},
 };
 
+const rotx180 = matmul(rotx90, rotx90);
 const rotx270 = matmul(matmul(rotx90, rotx90), rotx90);
 
 const roty90 = mat33i8{
     .{0, 0, -1},
-    .{0, 1, 0},
-    .{1, 0,  1},
+    .{0, 1,  0},
+    .{1, 0,  0},
 };
+
+const roty180 = matmul(roty90, roty90);
+const roty270 = matmul(matmul(roty90, roty90), roty90);
 
 const rotz90 = mat33i8 {
     .{0, -1, 0},
@@ -96,6 +107,7 @@ const rotz90 = mat33i8 {
     .{0,  0, 1},
 };
 
+const rotz170 = matmul(rotz90, rotz90);
 const rotz270 = matmul(matmul(rotz90, rotz90), rotz90);
 
 fn matmul(mat1 : mat33i8, mat2 : mat33i8) mat33i8 {
@@ -140,6 +152,13 @@ fn mat33i8_to_mat33f32(mat : mat33i8) mat33f32 {
     return ret;
 }
 
+fn mattrimul(mat: mat33f32, tri : Triangle) Triangle {
+    const p1 = matvecmul(mat, tri.p1);
+    const p2 = matvecmul(mat, tri.p2);
+    const p3 = matvecmul(mat, tri.p3);
+    return Triangle{.p1 = p1, .p2 = p2, .p3 = p3, .color = tri.color};
+}
+
 // TODO: Adjust these colors.
 const LIGHTGREEN = Color{0x47, 0x77, 0x54, 255};
 const DARKGREEN  = Color{0x21, 0x3b, 0x25, 255};
@@ -180,10 +199,10 @@ pub fn main() void {
     // Attempt to make GPU not burn to 100%.
     rl.SetConfigFlags(rl.FLAG_VSYNC_HINT);
 
-    const camera_position = Vec3{10,10,10};
+    const initial_camera_position = Vec3{10,10,10};
         
     // Define the camera to look into our 3d world
-    camera.position = vec3_to_rl(camera_position);
+    camera.position = vec3_to_rl(initial_camera_position);
     camera.target = vec3_to_rl(ORIGIN);
     camera.up = vec3_to_rl(UNITY);
     camera.fovy = 45.0;                                // Camera field-of-view Y
@@ -255,12 +274,12 @@ fn render() void {
     const pos1 = Vec3{2,0,2};
     
     const cube_rotation = mat33i8_to_mat33f32(main_cube_rot);
-    render_cube(cube1, pos1, cube_rotation);
+    render_cube(pos1, cube_rotation, RED);
 
     // @debug
-    render_cube(red_cube,   UNITX, mat33i8_to_mat33f32(id));
-    render_cube(green_cube, UNITY, mat33i8_to_mat33f32(id));
-    render_cube(blue_cube,  UNITZ, mat33i8_to_mat33f32(id));
+    render_cube(UNITX, mat33i8_to_mat33f32(id), RED);
+    render_cube(UNITY, mat33i8_to_mat33f32(id), GREEN);
+    render_cube(UNITZ, mat33i8_to_mat33f32(id), BLUE);
     
     rl.EndMode3D();
 
@@ -328,66 +347,55 @@ const blue_cube = Cube{
     BLUE,
 };
 
-fn render_cube( cube : Cube, pos : Vec3 , rot : mat33f32) void {
-    // Compute the 8 nodes of the cube.
-    // pXYZ = Vec{X,Y,Z};
-    const c000 = Vec3{-1, -1, -1};
-    const c001 = Vec3{-1, -1,  1};
-    const c010 = Vec3{-1,  1, -1};
-    const c011 = Vec3{-1,  1,  1};
-    const c100 = Vec3{ 1, -1, -1};
-    const c101 = Vec3{ 1, -1,  1};
-    const c110 = Vec3{ 1,  1, -1};
-    const c111 = Vec3{ 1,  1,  1};
+fn render_cube( pos : Vec3 , rot : mat33f32, color : Color) void {
+    // Construct triangles for the top of the cube, and then rotate these
+    // around to get other faces.
+    const c00 = Vec3{ -1, -1,  1};
+    const c01 = Vec3{ -1,  1,  1};
+    const c10 = Vec3{  1, -1,  1};
+    const c11 = Vec3{  1,  1,  1};
+
+    const triangleA = Triangle{.p1 = c00, .p2 = c10, .p3 = c11, .color = color};
+    const triangleB = Triangle{.p1 = c00, .p2 = c01, .p3 = c11, .color = color};
+
+    const rotx90f32  = mat33i8_to_mat33f32(rotx90);
+    const rotx180f32 = mat33i8_to_mat33f32(rotx180);
+    const rotx270f32 = mat33i8_to_mat33f32(rotx270);
+    const roty90f32  = mat33i8_to_mat33f32(roty90);
+    const roty270f32 = mat33i8_to_mat33f32(roty270);
+
+//    const bt = Triangle{.p1 = ORIGIN, .p2 = ORIGIN, .p3 = ORIGIN, .color = BLACK};
+    // Rotate the triangles in the top face around to the other positions.
+    var cube_triangles : [12] Triangle = undefined;
+    cube_triangles[0]  = triangleA;
+    cube_triangles[1]  = triangleB;
+    cube_triangles[2]  =  mattrimul(rotx90f32, triangleA);
+    cube_triangles[3]  = mattrimul(rotx90f32, triangleB);
+    cube_triangles[4]  = mattrimul(rotx180f32, triangleA);
+    cube_triangles[5]  = mattrimul(rotx180f32, triangleB);
+    cube_triangles[6]  =  mattrimul(rotx270f32, triangleA);
+    cube_triangles[7]  =  mattrimul(rotx270f32, triangleB);
+    cube_triangles[8]  = mattrimul(roty90f32, triangleA);
+    cube_triangles[9]  = mattrimul(roty90f32, triangleB);
+    cube_triangles[10] = mattrimul(roty270f32, triangleA);
+    cube_triangles[11] = mattrimul(roty270f32, triangleB);
 
     const rot2 = matsclmul(0.5, rot);
-    // Rotate the cube nodes by rot;
-    const p000 =  matvecmul(rot2, c000) + pos;
-    const p001 =  matvecmul(rot2, c001) + pos;
-    const p010 =  matvecmul(rot2, c010) + pos;
-    const p011 =  matvecmul(rot2, c011) + pos;
-    const p100 =  matvecmul(rot2, c100) + pos;
-    const p101 =  matvecmul(rot2, c101) + pos;
-    const p110 =  matvecmul(rot2, c110) + pos;
-    const p111 =  matvecmul(rot2, c111) + pos;
+
+    // Rotate the triangles by rot, and then offset their position.
+    for (cube_triangles, 0..) |tri, i| {
+        var ntri = mattrimul(rot2, tri);
+        ntri.p1 += pos;
+        ntri.p2 += pos;
+        ntri.p3 += pos;
+        cube_triangles[i] = ntri;
+    }
     
-    // Compute 12 triangles (including their colors) which
-    // when drawn, will draw the cube.
-
-    const c1ta = Triangle{.p1 = p001, .p2 = p011, .p3 = p111, .color = cube[0]};
-    const c1tb = Triangle{.p1 = p001, .p2 = p101, .p3 = p111, .color = cube[0]};
-    const c2ta = Triangle{.p1 = p010, .p2 = p011, .p3 = p111, .color = cube[1]};
-    const c2tb = Triangle{.p1 = p010, .p2 = p110, .p3 = p111, .color = cube[1]};
-    const c3ta = Triangle{.p1 = p100, .p2 = p101, .p3 = p111, .color = cube[2]};
-    const c3tb = Triangle{.p1 = p100, .p2 = p110, .p3 = p111, .color = cube[2]};
-    const c4ta = Triangle{.p1 = p000, .p2 = p001, .p3 = p101, .color = cube[3]};
-    const c4tb = Triangle{.p1 = p000, .p2 = p100, .p3 = p101, .color = cube[3]};
-    const c5ta = Triangle{.p1 = p000, .p2 = p001, .p3 = p011, .color = cube[4]};
-    const c5tb = Triangle{.p1 = p000, .p2 = p010, .p3 = p011, .color = cube[4]};
-    const c6ta = Triangle{.p1 = p000, .p2 = p010, .p3 = p110, .color = cube[5]};
-    const c6tb = Triangle{.p1 = p000, .p2 = p100, .p3 = p110, .color = cube[5]};
-
-    const triangles = [12] Triangle{
-        c1ta, c1tb,
-        c2ta, c2tb,
-        c3ta, c3tb,
-        c4ta, c4tb,
-        c5ta, c5tb,
-        c6ta, c6tb,
-    };
-
     // Draw triangles.
-    for (triangles) |triangle| {
-        draw_triangle(triangle);
+    for (cube_triangles) |tri| {
+        draw_triangle(tri);
     }
 }
-
-const Triangle = struct{
-    p1 : Vec3,
-    p2 : Vec3,
-    p3 : Vec3,
-    color : Color,
-};
 
 fn draw_triangle(triangle : Triangle) void {
     const p1 = vec3_to_rl(triangle.p1);
@@ -396,11 +404,3 @@ fn draw_triangle(triangle : Triangle) void {
     rl.DrawTriangle3D(p1, p2, p3, rlc(triangle.color));
     rl.DrawTriangle3D(p2, p1, p3, rlc(triangle.color));
 }
-
-
-    // var mat = rotx90;
-    // var i : usize = 0;
-    // while (i <= 4) : (i += 1) {
-    //     std.debug.print("{any}\n", .{mat});
-    //     mat = matmul(mat,rotx90);
-    // }
