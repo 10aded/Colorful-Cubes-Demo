@@ -35,6 +35,10 @@
 const std    = @import("std");
 const rl     = @cImport(@cInclude("raylib.h"));
 
+const sin    = std.math.sin;
+const cos    = std.math.cos;
+const pi     = std.math.pi;
+
 const mat33i8  = [3] @Vector(3, i8);
 const mat33f32 = [3] @Vector(3, f32);
 const Vec3    = @Vector(3, f32);
@@ -48,6 +52,12 @@ const Triangle = struct{
     color : Color,
 };
 
+const ANIMATION_TYPE = enum(u8) {
+    UP,
+    DOWN,
+    LEFT,
+    RIGHT,
+};
 
 // Globals
 const WINDOW_TITLE = "Colorful Cubes Demo";
@@ -60,8 +70,8 @@ var cube_pos = Vec3Int{1,0,1};
 var cube_posf32 : Vec3 = undefined;
 
 // Animation
+var   animation_type      = ANIMATION_TYPE.UP;
 const ANIMATION_TIME      = 0.2;
-var   animation_direction = Vec3{0,0,0};
 
 // Keyboard
 var left_key_down             : bool = false;
@@ -117,6 +127,23 @@ const rotz90 = mat33i8 {
 
 const rotz180 = matmul(rotz90, rotz90);
 const rotz270 = matmul(matmul(rotz90, rotz90), rotz90);
+
+fn matxrottheta(t : f32) mat33f32 {
+    return mat33f32{
+        .{1, 0, 0},
+        .{0, cos(t), -sin(t)},
+        .{0, sin(t),  cos(t)},
+    };
+}
+
+fn matzrottheta(t : f32) mat33f32 {
+    return mat33f32{
+        .{cos(t), -sin(t), 0},
+        .{sin(t),  cos(t), 0},
+        .{     0,       0, 1},
+    };
+}
+
 
 fn matmul(mat1 : mat33i8, mat2 : mat33i8) mat33i8 {
     var ret : mat33i8 = undefined;
@@ -230,6 +257,18 @@ pub fn main() anyerror!void {
 
         process_input_update_state();
 
+
+        // Set the translation animation direction.
+        const animation_direction = switch (animation_type) {
+            .UP    => Vec3{1,0,0},
+            .DOWN  => Vec3{-1,0,0},
+            .LEFT  => Vec3{0,0,-1},
+            .RIGHT => Vec3{0,0,1},
+        };
+
+        // Set the rotation animation direction.
+        
+        
         const elapsed_time_nano = stopwatch.read();
         const elapsed_time_secs_f64 = @as(f64, @floatFromInt(elapsed_time_nano)) / @as(f64, std.time.ns_per_s);
         const elapsed_time_secs = @as(f32, @floatCast(elapsed_time_secs_f64));
@@ -245,6 +284,10 @@ pub fn main() anyerror!void {
         const afv : Vec3 = @splat(1 - animation_fraction);
         const animation_offset =  afv * animation_direction;
         cube_posf32 += animation_offset;
+
+        // Calculate cube animation rotation.
+        const theta = (1 - animation_fraction) * 0.5 * pi;
+        std.debug.print("theta: {}\n", .{theta}); // @debug
         
         render();
     }
@@ -272,28 +315,28 @@ fn process_input_update_state() void {
     if (left_key_down and ! left_key_down_last_frame) {
         main_cube_rot = matmul(rotx90, main_cube_rot);
         cube_pos += Vec3Int{0,0,1};
-        animation_direction = Vec3{0,0,-1};
+        animation_type = .LEFT;
         _ = stopwatch.lap();
     }
 
     if (right_key_down and ! right_key_down_last_frame) {
         main_cube_rot = matmul(rotx270, main_cube_rot);
+        animation_type = .RIGHT;
         cube_pos -= Vec3Int{0,0,1};
-        animation_direction = Vec3{0,0,1};
         _ = stopwatch.lap();
     }
 
     if (up_key_down and ! up_key_down_last_frame) {
         main_cube_rot = matmul(rotz90, main_cube_rot);
+        animation_type = .UP;
         cube_pos -= Vec3Int{1,0,0};
-        animation_direction = Vec3{1,0,0};
         _ = stopwatch.lap();
     }
 
     if (down_key_down and ! down_key_down_last_frame) {
         main_cube_rot = matmul(rotz270, main_cube_rot);
+        animation_type = .DOWN;        
         cube_pos += Vec3Int{1,0,0};
-        animation_direction = Vec3{-1,0,0};
         _ = stopwatch.lap();
     }
 
