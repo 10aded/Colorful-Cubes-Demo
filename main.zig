@@ -35,11 +35,10 @@
 const std    = @import("std");
 const rl     = @cImport(@cInclude("raylib.h"));
 
-const mat33i8  = [3][3] i8;
-const mat33f32 = [3][3] f32;
+const mat33i8  = [3] @Vector(3, i8);
+const mat33f32 = [3] @Vector(3, f32);
 const Vec3  = @Vector(3, f32);
 const Color = [4] u8;
-
 
 const Triangle = struct{
     p1 : Vec3,
@@ -129,17 +128,17 @@ fn matmul(mat1 : mat33i8, mat2 : mat33i8) mat33i8 {
 fn matvecmul(mat : mat33f32, vec : Vec3) Vec3 {
     var ret : Vec3 = undefined;
     for (0..3) |i| {
-        ret[i] = mat[i][0] * vec[0] + mat[i][1] * vec[1] + mat[i][2] * vec[2];
+        const dot = mat[i] * vec;
+        ret[i] = @reduce(.Add, dot);
     }
     return ret;
 }
 
 fn matsclmul(scalar : f32, mat : mat33f32) mat33f32 {
-    var ret = mat;
+    var scv : Vec3 = @splat(scalar);
+    var ret :  mat33f32 = undefined;
     for (0..3) |i| {
-        for (0..3) |j| {
-            ret[i][j] *= scalar;
-        }
+        ret[i] = mat[i] * scv;
     }
     return ret;
 }
@@ -147,6 +146,9 @@ fn matsclmul(scalar : f32, mat : mat33f32) mat33f32 {
 fn mat33i8_to_mat33f32(mat : mat33i8) mat33f32 {
     var ret : mat33f32 = undefined;
     for (0..3) |i| {
+        // Note: The current lines fails with v.0.11.0 of the compiler,
+        // bit this has been fixed in a dev version of v.0.12.0.
+        // ret[i] = @floatFromInt(mat[i]);
         for (0..3) |j| {
             ret[i][j] = @floatFromInt(mat[i][j]);
         }
@@ -191,13 +193,6 @@ const test_p3 = Vec3{1, 1, 0};
 const test_triangle = [3]Vec3{test_p1, test_p2, test_p3};
 
 pub fn main() void {
-
-    //@debug
-    const vec1 = Vec3{1,2,3};
-    const vec2 = Vec3{0,4,1};
-    const test1 = vec1 * vec2 == Vec3{0, 8, 3};
-    std.debug.print("{any}\n", .{test1});
-    
     // Attempt to make GPU not burn to 100%.
     rl.SetConfigFlags(rl.FLAG_VSYNC_HINT);
 
