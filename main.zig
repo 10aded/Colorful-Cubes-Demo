@@ -56,7 +56,12 @@ const WINDOW_TITLE = "Colorful Cubes Demo";
 var camera : rl.Camera3D = undefined;
 
 // Game
-var cube_pos = Vec3Int{3,0,3};
+var cube_pos = Vec3Int{1,0,1};
+var cube_posf32 : Vec3 = undefined;
+
+// Animation
+const ANIMATION_TIME      = 0.2;
+var   animation_direction = Vec3{0,0,0};
 
 // Keyboard
 var left_key_down             : bool = false;
@@ -195,12 +200,18 @@ const test_p2 = Vec3{1, 0, 0};
 const test_p3 = Vec3{1, 1, 0};
 const test_triangle = [3]Vec3{test_p1, test_p2, test_p3};
 
-pub fn main() void {
+var stopwatch : std.time.Timer = undefined;
+
+pub fn main() anyerror!void {
     // Attempt to make GPU not burn to 100%.
     rl.SetConfigFlags(rl.FLAG_VSYNC_HINT);
 
     const initial_camera_position = Vec3{10,10,10};
-        
+
+    // Start the timer (used in animations).
+    stopwatch = try std.time.Timer.start();
+
+    
     // Define the camera to look into our 3d world
     camera.position = vec3_to_rl(initial_camera_position);
     camera.target = vec3_to_rl(ORIGIN);
@@ -218,6 +229,23 @@ pub fn main() void {
     while ( ! rl.WindowShouldClose() ) { // Listen for close button or ESC key.
 
         process_input_update_state();
+
+        const elapsed_time_nano = stopwatch.read();
+        const elapsed_time_secs_f64 = @as(f64, @floatFromInt(elapsed_time_nano)) / @as(f64, std.time.ns_per_s);
+        const elapsed_time_secs = @as(f32, @floatCast(elapsed_time_secs_f64));
+        
+        const clamped_time = std.math.clamp(elapsed_time_secs, 0, ANIMATION_TIME);
+        const animation_fraction = clamped_time / ANIMATION_TIME;
+
+        // @floatFromInt doesn't work on vectors in Zig v.0.11.0, this has been fixed in v.0.12.dev
+        cube_posf32 = Vec3{@floatFromInt(cube_pos[0]), @floatFromInt(cube_pos[1]), @floatFromInt(cube_pos[2])};
+
+        // TODO... Put this code somewhere sensible.
+        // Depending on the animation_fraction, offset the position of the cube.
+        const afv : Vec3 = @splat(1 - animation_fraction);
+        const animation_offset =  afv * animation_direction;
+        cube_posf32 += animation_offset;
+        
         render();
     }
 }
@@ -244,21 +272,29 @@ fn process_input_update_state() void {
     if (left_key_down and ! left_key_down_last_frame) {
         main_cube_rot = matmul(rotx90, main_cube_rot);
         cube_pos += Vec3Int{0,0,1};
+        animation_direction = Vec3{0,0,-1};
+        _ = stopwatch.lap();
     }
 
     if (right_key_down and ! right_key_down_last_frame) {
         main_cube_rot = matmul(rotx270, main_cube_rot);
         cube_pos -= Vec3Int{0,0,1};
+        animation_direction = Vec3{0,0,1};
+        _ = stopwatch.lap();
     }
 
     if (up_key_down and ! up_key_down_last_frame) {
         main_cube_rot = matmul(rotz90, main_cube_rot);
         cube_pos -= Vec3Int{1,0,0};
+        animation_direction = Vec3{1,0,0};
+        _ = stopwatch.lap();
     }
 
     if (down_key_down and ! down_key_down_last_frame) {
         main_cube_rot = matmul(rotz270, main_cube_rot);
         cube_pos += Vec3Int{1,0,0};
+        animation_direction = Vec3{-1,0,0};
+        _ = stopwatch.lap();
     }
 
     // @debug
@@ -278,8 +314,8 @@ fn render() void {
 
 
     const cube_rotation = mat33i8_to_mat33f32(main_cube_rot);
-    const cube_pos_f32 = Vec3{@floatFromInt(cube_pos[0]), @floatFromInt(cube_pos[1]), @floatFromInt(cube_pos[2])};
-    render_cube(cube1, cube_pos_f32, cube_rotation);
+
+    render_cube(cube1, cube_posf32, cube_rotation);
 
     // @debug
     render_cube(red_cube, UNITX, mat33i8_to_mat33f32(id));
