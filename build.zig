@@ -10,7 +10,7 @@ pub fn build(b: *std.Build) void {
 	const optimize = b.standardOptimizeOption(.{});
 
 	const exe = b.addExecutable(.{
-		.name = "Colorful-Cubes-Demo",
+		.name = "Rolling-Cubes-Demo",
 		.root_source_file = .{ .path = "main.zig" },
 		.target = target,
 		.optimize = optimize,
@@ -31,7 +31,7 @@ pub fn build(b: *std.Build) void {
 		run_cmd.addArgs(args);
 	}
 
-	const run_step = b.step("run", "run the game");
+	const run_step = b.step("run", "run the demo");
 	run_step.dependOn(&run_cmd.step);
 }
 
@@ -42,6 +42,7 @@ pub fn addRaylib(b: *std.Build, target: std.zig.CrossTarget, optimize: std.built
         "-std=gnu99",
         "-D_GNU_SOURCE",
         "-DGL_SILENCE_DEPRECATION=199309L",
+        // Suggestion: -DUSE_WAYLAND could be added.
     };
 
     const raylib = b.addStaticLibrary(.{
