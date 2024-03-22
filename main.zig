@@ -60,6 +60,9 @@ const WINDOW_TITLE = "Rolling cube demo";
 const initial_screen_width  = 1080;
 const initial_screen_height = 1080 / 4 * 3;
 
+// Camera
+const initial_camera_position = Vec3{6,6,6};
+
 // Geometry
 const ORIGIN = Vec3{0,0,0};
 const UNITX  = Vec3{1,0,0};
@@ -219,32 +222,20 @@ fn mattrimul(mat: mat33f32, tri : Triangle) Triangle {
     return Triangle{.p1 = p1, .p2 = p2, .p3 = p3, .color = tri.color};
 }
 
-
-
-
-
-//@debug
-const test_p1 = Vec3{0, 0, 0};
-const test_p2 = Vec3{1, 0, 0};
-const test_p3 = Vec3{1, 1, 0};
-const test_triangle = [3]Vec3{test_p1, test_p2, test_p3};
-
 var stopwatch : std.time.Timer = undefined;
 
 pub fn main() anyerror!void {
-    // Attempt to make GPU not burn to 100%.
+    // Attempt to make GPU not burn to 100%, maybe doesn't work?
     rl.SetConfigFlags(rl.FLAG_VSYNC_HINT);
-
-    const initial_camera_position = Vec3{6,6,6};
 
     // Start the timer (used in animations).
     stopwatch = try std.time.Timer.start();
 
     // Define the camera to look into our 3d world
-    camera.position = vec3_to_rl(initial_camera_position);
-    camera.target = vec3_to_rl(ORIGIN);
-    camera.up = vec3_to_rl(UNITY);
-    camera.fovy = 45.0;                                // Camera field-of-view Y
+    camera.position   = vec3_to_rl(initial_camera_position);
+    camera.target     = vec3_to_rl(ORIGIN);
+    camera.up         = vec3_to_rl(UNITY);
+    camera.fovy       = 45.0;                                // Camera field-of-view Y
     camera.projection = rl.CAMERA_PERSPECTIVE;             // Camera projection type
     
     // Spawn and setup raylib window.    
@@ -257,74 +248,24 @@ pub fn main() anyerror!void {
     while ( ! rl.WindowShouldClose() ) { // Listen for close button or ESC key.
 
         process_input_update_state();
-
-
-        const elapsed_time_nano = stopwatch.read();
-        const elapsed_time_secs_f64 = @as(f64, @floatFromInt(elapsed_time_nano)) / @as(f64, std.time.ns_per_s);
-        const elapsed_time_secs = @as(f32, @floatCast(elapsed_time_secs_f64));
-        
-        const clamped_time = std.math.clamp(elapsed_time_secs, 0, ANIMATION_TIME);
-        // fraction is 0 at start of animation, 1 at end.
-        const animation_fraction = clamped_time / ANIMATION_TIME;
-
-        // @floatFromInt doesn't work on vectors in Zig v.0.11.0, this has been fixed in v.0.12.dev
-        cube_posf32 = Vec3{@floatFromInt(cube_pos[0]), @floatFromInt(cube_pos[1]), @floatFromInt(cube_pos[2])};
-
-        // Add in 0.5 offset, so that the center of the cube is not actually the origin.
-        cube_posf32 += Vec3{0.5, 0.5, 0.5};
-
-        // TODO... Put this code somewhere sensible.
-        // Depending on the animation_fraction, offset the position of the cube.
-        // Set the translation animation direction.
-
-        // The center of the cube, during rotation, moves on a circle
-        // of radius R = sqrt(2)/2, from angle pi/4 to 3pi/4.
-        const R = 0.5 * std.math.sqrt2;
-        const theta1 = (1 - animation_fraction) * 0.5 * pi;
-        // At t = 0, theta2 = 3/4pi,
-        // at t = 1, theta2 = 1/4pi.
-        const theta2 = theta1 + 0.25 * pi;
-        const animation_offset = switch (animation_type) {
-            .UP    => Vec3{-R * cos(theta2), R * sin(theta2), 0}  - Vec3{-R * cos(0.25 * pi), R * sin(0.25 * pi), 0},
-            .DOWN  => Vec3{ R * cos(theta2), R * sin(theta2), 0}  - Vec3{ R * cos(0.25 * pi), R * sin(0.25 * pi), 0},
-            .LEFT  => Vec3{0, R * sin(theta2), R * cos(theta2)}  - Vec3{0, R * sin(0.25 * pi),  R * cos(0.25 * pi)},
-            .RIGHT => Vec3{0, R * sin(theta2), -R * cos(theta2)} - Vec3{0, R * sin(0.25 * pi), -R * cos(0.25 * pi)},
-        };
-
-        // Calculate cube animation rotation.
-
-//        std.debug.print("theta: {}\n", .{theta}); // @debug
-        
-        // Set the rotation animation matrix.
-        animation_matrix = switch(animation_type) {
-            .UP    => matzrottheta(-theta1),
-            .DOWN  => matzrottheta(theta1),
-            .LEFT  => matxrottheta(-theta1),
-            .RIGHT => matxrottheta(theta1),
-        };
-
-        cube_posf32 += animation_offset;
-        
+        apply_animations();
         render();
     }
 }
 
 fn process_input_update_state() void {
-    // @debug
-    // left  arrow: rotx90
-    // right arrow: rotx270
-    // up    arrow: rotz90
-    // down  arrow: rotz270
-
     // Check to see how pressed keys are.
-    left_key_down_last_frame = left_key_down;
-    left_key_down = rl.IsKeyDown(rl.KEY_LEFT);
+    left_key_down_last_frame  = left_key_down;
+    left_key_down             = rl.IsKeyDown(rl.KEY_LEFT);
+
     right_key_down_last_frame = right_key_down;
-    right_key_down = rl.IsKeyDown(rl.KEY_RIGHT);
-    up_key_down_last_frame = up_key_down;
-    up_key_down = rl.IsKeyDown(rl.KEY_UP);    
-    down_key_down_last_frame = down_key_down;
-    down_key_down = rl.IsKeyDown(rl.KEY_DOWN);    
+    right_key_down            = rl.IsKeyDown(rl.KEY_RIGHT);
+
+    up_key_down_last_frame    = up_key_down;
+    up_key_down               = rl.IsKeyDown(rl.KEY_UP);    
+
+    down_key_down_last_frame  = down_key_down;
+    down_key_down             = rl.IsKeyDown(rl.KEY_DOWN);    
 
     // When keys are pressed, rotate the cube, and update
     // its position.
@@ -355,11 +296,59 @@ fn process_input_update_state() void {
         cube_pos += Vec3Int{1,0,0};
         _ = stopwatch.lap();
     }
-
-    // @debug
-//    std.debug.print("{any}\n", .{main_cube_rot});
 }
 
+fn apply_animations() void {
+    // Calculate, as a f32, the number of seconds passed since a arrow key was last pressed.
+    // Clamp this time at ANIMATION_TIME.
+    const elapsed_time_nano = stopwatch.read();
+    const elapsed_time_secs_f64 = @as(f64, @floatFromInt(elapsed_time_nano)) / @as(f64, std.time.ns_per_s);
+    const elapsed_time_secs = @as(f32, @floatCast(elapsed_time_secs_f64));
+    const clamped_time = std.math.clamp(elapsed_time_secs, 0, ANIMATION_TIME);
+
+    // Calculate the keyframe fraction.
+    // I.e. 0 at start of an animation, 1 at the end.
+    const animation_fraction = clamped_time / ANIMATION_TIME;
+
+    // Can't cast @Vector(3, i8) to @Vector(3, f32) with @floatFromInt in Zig v.0.11.0,
+    // this has been fixed in v.0.12.dev though.
+    cube_posf32 = Vec3{@floatFromInt(cube_pos[0]),
+                       @floatFromInt(cube_pos[1]),
+                       @floatFromInt(cube_pos[2])};
+
+    // Add in 0.5 offset, so that the cube sits on the squares of the grid.
+    cube_posf32 += Vec3{0.5, 0.5, 0.5};
+
+    // Depending on the animation_fraction, offset the position of the cube as follows:
+    // The center of the cube, during rotation, moves on a circle
+    // of radius R = sqrt(2)/2, from angle pi/4 to 3pi/4.
+    
+    const R = 0.5 * std.math.sqrt2;
+    const theta1 = (1 - animation_fraction) * 0.5 * pi;
+    const theta2 = theta1 + 0.25 * pi;
+    // At t = 0, theta1 = 1/2 pi,
+    // at t = 1, theta1 = 0   pi.
+    // At t = 0, theta2 = 3/4 pi,
+    // at t = 1, theta2 = 1/4 pi.
+
+    // Calculate the center of the cube offset.
+    const animation_offset = switch (animation_type) {
+        .UP    => Vec3{-R * cos(theta2), R * sin(theta2), 0}  - Vec3{-R * cos(0.25 * pi), R * sin(0.25 * pi), 0},
+        .DOWN  => Vec3{ R * cos(theta2), R * sin(theta2), 0}  - Vec3{ R * cos(0.25 * pi), R * sin(0.25 * pi), 0},
+        .LEFT  => Vec3{0, R * sin(theta2), R * cos(theta2)}  - Vec3{0, R * sin(0.25 * pi),  R * cos(0.25 * pi)},
+        .RIGHT => Vec3{0, R * sin(theta2), -R * cos(theta2)} - Vec3{0, R * sin(0.25 * pi), -R * cos(0.25 * pi)},
+    };
+    
+    cube_posf32 += animation_offset;
+    
+    // Calculate cube animation rotation.
+    animation_matrix = switch(animation_type) {
+        .UP    => matzrottheta(-theta1),
+        .DOWN  => matzrottheta(theta1),
+        .LEFT  => matxrottheta(-theta1),
+        .RIGHT => matxrottheta(theta1),
+    };
+}
 
 fn render() void {
     rl.BeginDrawing();
