@@ -243,7 +243,7 @@ pub fn main() anyerror!void {
     // Attempt to make GPU not burn to 100%.
     rl.SetConfigFlags(rl.FLAG_VSYNC_HINT);
 
-    const initial_camera_position = Vec3{10,4,1};
+    const initial_camera_position = Vec3{6,6,6};
 
     // Start the timer (used in animations).
     stopwatch = try std.time.Timer.start();
@@ -272,39 +272,42 @@ pub fn main() anyerror!void {
         const elapsed_time_secs = @as(f32, @floatCast(elapsed_time_secs_f64));
         
         const clamped_time = std.math.clamp(elapsed_time_secs, 0, ANIMATION_TIME);
+        // fraction is 0 at start of animation, 1 at end.
         const animation_fraction = clamped_time / ANIMATION_TIME;
 
         // @floatFromInt doesn't work on vectors in Zig v.0.11.0, this has been fixed in v.0.12.dev
         cube_posf32 = Vec3{@floatFromInt(cube_pos[0]), @floatFromInt(cube_pos[1]), @floatFromInt(cube_pos[2])};
 
-        // TODO: Replace animation_direction below with something that computes
-        // the correct animation offset (that follows the center of a the cube
-        // on the arc of a circle).
-        
         // TODO... Put this code somewhere sensible.
         // Depending on the animation_fraction, offset the position of the cube.
         // Set the translation animation direction.
-        const animation_direction = switch (animation_type) {
-            .UP    => Vec3{1,0,0},
-            .DOWN  => Vec3{-1,0,0},
-            .LEFT  => Vec3{0,0,-1},
-            .RIGHT => Vec3{0,0,1},
+
+        // The center of the cube, during rotation, moves on a circle
+        // of radius R = sqrt(2)/2, from angle pi/4 to 3pi/4.
+        const R = 0.5 * std.math.sqrt2;
+        const theta1 = (1 - animation_fraction) * 0.5 * pi;
+        // At t = 0, theta2 = 3/4pi,
+        // at t = 1, theta2 = 1/4pi.
+        const theta2 = theta1 + 0.25 * pi;
+        const animation_offset = switch (animation_type) {
+            .UP    => Vec3{-R * cos(theta2), R * sin(theta2), 0}  - Vec3{-R * cos(0.25 * pi), R * sin(0.25 * pi), 0},
+            .DOWN  => Vec3{ R * cos(theta2), R * sin(theta2), 0}  - Vec3{ R * cos(0.25 * pi), R * sin(0.25 * pi), 0},
+            .LEFT  => Vec3{0, R * sin(theta2), R * cos(theta2)}  - Vec3{0, R * sin(0.25 * pi),  R * cos(0.25 * pi)},
+            .RIGHT => Vec3{0, R * sin(theta2), -R * cos(theta2)} - Vec3{0, R * sin(0.25 * pi), -R * cos(0.25 * pi)},
         };
 
         // Calculate cube animation rotation.
-        const theta = (1 - animation_fraction) * 0.5 * pi;
+
 //        std.debug.print("theta: {}\n", .{theta}); // @debug
         
         // Set the rotation animation matrix.
         animation_matrix = switch(animation_type) {
-            .UP    => matzrottheta(-theta),
-            .DOWN  => matzrottheta(theta),
-            .LEFT  => matxrottheta(-theta),
-            .RIGHT => matxrottheta(theta),
+            .UP    => matzrottheta(-theta1),
+            .DOWN  => matzrottheta(theta1),
+            .LEFT  => matxrottheta(-theta1),
+            .RIGHT => matxrottheta(theta1),
         };
 
-        const afv : Vec3 = @splat(1 - animation_fraction);
-        const animation_offset =  afv * animation_direction;
         cube_posf32 += animation_offset;
         
         render();
