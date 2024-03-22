@@ -1,6 +1,6 @@
 // This is simple demo in which a cube rolls on grid, controlled by arrow keys.
 //
-// Created by 10aded Mar 2024 --- ???
+// Created by 10aded Mar 2024 --- Mar 2024.
 //
 // This project was compiled using the Zig compiler (version 0.11.0)
 // and built with the command:
@@ -24,9 +24,6 @@
 //
 // See the pages above for full license details.
 
-// TODO:
-// * Make the translation animation for the cube go along an arc; adjust animation_direction.
-
 const std    = @import("std");
 const rl     = @cImport(@cInclude("raylib.h"));
 
@@ -34,10 +31,13 @@ const sin    = std.math.sin;
 const cos    = std.math.cos;
 const pi     = std.math.pi;
 
-const mat33i8  = [3] @Vector(3, i8);
-const mat33f32 = [3] @Vector(3, f32);
+
 const Vec3    = @Vector(3, f32);
 const Vec3Int = @Vector(3, i32);
+
+const mat33i8  = [3] @Vector(3, i8);
+const mat33f32 = [3] @Vector(3, f32);
+
 const Color = [4] u8;
 
 const Triangle = struct{
@@ -54,32 +54,27 @@ const ANIMATION_TYPE = enum(u8) {
     RIGHT,
 };
 
-// Globals
-const WINDOW_TITLE = "Colorful Cubes Demo";
+// Constants.
+// Window
+const WINDOW_TITLE = "Rolling cube demo";
+const initial_screen_width  = 1080;
+const initial_screen_height = 1080 / 4 * 3;
 
-// Camera
-var camera : rl.Camera3D = undefined;
+// Geometry
+const ORIGIN = Vec3{0,0,0};
+const UNITX  = Vec3{1,0,0};
+const UNITY  = Vec3{0,1,0};
+const UNITZ  = Vec3{0,0,1};
 
-// Game
-var cube_pos = Vec3Int{1,0,1};
-var cube_posf32 : Vec3 = undefined;
-
-// Animation
-var   animation_type      = ANIMATION_TYPE.UP;
+// Animation.
 const ANIMATION_TIME      = 0.2;
-var   animation_matrix : mat33f32 = undefined;
 
-// Keyboard
-var left_key_down             : bool = false;
-var left_key_down_last_frame  : bool = false;
-var right_key_down            : bool = false;
-var right_key_down_last_frame : bool = false;
-var up_key_down               : bool = false;
-var up_key_down_last_frame    : bool = false;
-var down_key_down             : bool = false;
-var down_key_down_last_frame  : bool = false;
+// Colors.
+const BLACK   = Color{0x00, 0x00, 0x00, 0xFF};
+const WHITE   = Color{0xFF, 0xFF, 0xFF, 255};
+const YELLOW  = Color{0xf5, 0xcf, 0x13, 255};
+const DEBUG   = Color{0xFF, 0x00, 0xFF, 0xFF};
 
-// Constants
 // Matrices
 var main_cube_rot = id;
 
@@ -97,8 +92,8 @@ const rotx90 = mat33i8{
     .{0, 1,  0},
 };
 
-const rotx180 = matmul(rotx90, rotx90);
-const rotx270 = matmul(matmul(rotx90, rotx90), rotx90);
+const rotx180 = matmulT(i8,rotx90, rotx90);
+const rotx270 = matmulT(i8,matmulT(i8, rotx90, rotx90), rotx90);
 
 const roty90 = mat33i8{
     .{0, 0, -1},
@@ -106,8 +101,8 @@ const roty90 = mat33i8{
     .{1, 0,  0},
 };
 
-const roty180 = matmul(roty90, roty90);
-const roty270 = matmul(matmul(roty90, roty90), roty90);
+const roty180 = matmulT(i8,roty90, roty90);
+const roty270 = matmulT(i8,matmulT(i8, roty90, roty90), roty90);
 
 const rotz90 = mat33i8 {
     .{0, -1, 0},
@@ -115,9 +110,33 @@ const rotz90 = mat33i8 {
     .{0,  0, 1},
 };
 
-const rotz180 = matmul(rotz90, rotz90);
-const rotz270 = matmul(matmul(rotz90, rotz90), rotz90);
+const rotz180 = matmulT(i8,rotz90, rotz90);
+const rotz270 = matmulT(i8,matmulT(i8, rotz90, rotz90), rotz90);
 
+// Globals
+// Game
+var cube_pos = Vec3Int{0,0,0};
+var cube_posf32 : Vec3 = undefined;
+
+// Animation
+var   animation_type      = ANIMATION_TYPE.UP;
+var   animation_matrix : mat33f32 = undefined;
+
+// Keyboard
+var left_key_down             : bool = false;
+var left_key_down_last_frame  : bool = false;
+var right_key_down            : bool = false;
+var right_key_down_last_frame : bool = false;
+var up_key_down               : bool = false;
+var up_key_down_last_frame    : bool = false;
+var down_key_down             : bool = false;
+var down_key_down_last_frame  : bool = false;
+
+// Camera
+var camera : rl.Camera3D = undefined;
+
+// Generate matrices that rotate about a given axis.
+// x-axis rotation.
 fn matxrottheta(t : f32) mat33f32 {
     return mat33f32{
         .{1, 0, 0},
@@ -125,7 +144,11 @@ fn matxrottheta(t : f32) mat33f32 {
         .{0, sin(t),  cos(t)},
     };
 }
+// Note:
+// y-axis rotation is not needed in this demo, since the y-axis
+// points "up".
 
+// z-axis rotation.
 fn matzrottheta(t : f32) mat33f32 {
     return mat33f32{
         .{cos(t), -sin(t), 0},
@@ -134,12 +157,17 @@ fn matzrottheta(t : f32) mat33f32 {
     };
 }
 
+// It doesn't appear that matrix multiplication is in the Zig standard
+// libary, so here are some versions of the common functions.
 
-fn matmul(mat1 : mat33i8, mat2 : mat33i8) mat33i8 {
-    var ret : mat33i8 = undefined;
+// Comment: In Zig 0.11.0, there seems to be generics support.
+
+// Matrix multiplication, used in our case with T = i8, f32.
+fn matmulT(comptime T : type, mat1 : [3] @Vector(3, T), mat2 : [3] @Vector(3, T)) [3] @Vector(3, T) {
+    var ret : [3] @Vector(3, T) = undefined;
     for (0..3) |i| {
         for (0..3) |j| {
-            var sum : i8 = 0;
+            var sum : T = 0;
             for (0..3) |k| {
                 sum += mat1[i][k] * mat2[k][j];
             }
@@ -149,20 +177,7 @@ fn matmul(mat1 : mat33i8, mat2 : mat33i8) mat33i8 {
     return ret;
 }
 
-fn matmulf32(mat1 : mat33f32, mat2 : mat33f32) mat33f32 {
-    var ret : mat33f32 = undefined;
-    for (0..3) |i| {
-        for (0..3) |j| {
-            var sum : f32 = 0;
-            for (0..3) |k| {
-                sum += mat1[i][k] * mat2[k][j];
-            }
-            ret[i][j] = sum;
-        }
-    }
-    return ret;
-}
-
+// Multiplying a vector by a matrix.
 fn matvecmul(mat : mat33f32, vec : Vec3) Vec3 {
     var ret : Vec3 = undefined;
     for (0..3) |i| {
@@ -172,6 +187,7 @@ fn matvecmul(mat : mat33f32, vec : Vec3) Vec3 {
     return ret;
 }
 
+// Scaling a matrix.
 fn matsclmul(scalar : f32, mat : mat33f32) mat33f32 {
     var scv : Vec3 = @splat(scalar);
     var ret :  mat33f32 = undefined;
@@ -181,6 +197,7 @@ fn matsclmul(scalar : f32, mat : mat33f32) mat33f32 {
     return ret;
 }
 
+// Converting a i8 matrix to a f32 matrix.
 fn mat33i8_to_mat33f32(mat : mat33i8) mat33f32 {
     var ret : mat33f32 = undefined;
     for (0..3) |i| {
@@ -194,6 +211,7 @@ fn mat33i8_to_mat33f32(mat : mat33i8) mat33f32 {
     return ret;
 }
 
+// Applying a matrix to a triangle.
 fn mattrimul(mat: mat33f32, tri : Triangle) Triangle {
     const p1 = matvecmul(mat, tri.p1);
     const p2 = matvecmul(mat, tri.p2);
@@ -201,20 +219,9 @@ fn mattrimul(mat: mat33f32, tri : Triangle) Triangle {
     return Triangle{.p1 = p1, .p2 = p2, .p3 = p3, .color = tri.color};
 }
 
-const YELLOW  = Color{0xf5, 0xcf, 0x13, 255};
-const DEBUG   = Color{0xFF, 0x00, 0xFF, 0xFF};
-const BLACK   = Color{0x00, 0x00, 0x00, 0xFF};
-const WHITE   = Color{0xFF, 0xFF, 0xFF, 255};
 
-// Window
-const initial_screen_width  = 1080;
-const initial_screen_height = 1080 / 4 * 3;
 
-// Geometry
-const ORIGIN = Vec3{0,0,0};
-const UNITX  = Vec3{1,0,0};
-const UNITY  = Vec3{0,1,0};
-const UNITZ  = Vec3{0,0,1};
+
 
 //@debug
 const test_p1 = Vec3{0, 0, 0};
@@ -322,28 +329,28 @@ fn process_input_update_state() void {
     // When keys are pressed, rotate the cube, and update
     // its position.
     if (left_key_down and ! left_key_down_last_frame) {
-        main_cube_rot = matmul(rotx90, main_cube_rot);
+        main_cube_rot = matmulT(i8, rotx90, main_cube_rot);
         cube_pos += Vec3Int{0,0,1};
         animation_type = .LEFT;
         _ = stopwatch.lap();
     }
 
     if (right_key_down and ! right_key_down_last_frame) {
-        main_cube_rot = matmul(rotx270, main_cube_rot);
+        main_cube_rot = matmulT(i8, rotx270, main_cube_rot);
         animation_type = .RIGHT;
         cube_pos -= Vec3Int{0,0,1};
         _ = stopwatch.lap();
     }
 
     if (up_key_down and ! up_key_down_last_frame) {
-        main_cube_rot = matmul(rotz90, main_cube_rot);
+        main_cube_rot = matmulT(i8, rotz90, main_cube_rot);
         animation_type = .UP;
         cube_pos -= Vec3Int{1,0,0};
         _ = stopwatch.lap();
     }
 
     if (down_key_down and ! down_key_down_last_frame) {
-        main_cube_rot = matmul(rotz270, main_cube_rot);
+        main_cube_rot = matmulT(i8, rotz270, main_cube_rot);
         animation_type = .DOWN;        
         cube_pos += Vec3Int{1,0,0};
         _ = stopwatch.lap();
@@ -365,7 +372,7 @@ fn render() void {
     rl.DrawGrid(10, 1);
 
     const final_cube_rotation = mat33i8_to_mat33f32(main_cube_rot);
-    const cube_rotation = matmulf32(animation_matrix, final_cube_rotation);
+    const cube_rotation = matmulT(f32, animation_matrix, final_cube_rotation);
 
     render_cube(YELLOW, cube_posf32, cube_rotation);
     
