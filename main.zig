@@ -80,12 +80,6 @@ var down_key_down             : bool = false;
 var down_key_down_last_frame  : bool = false;
 
 // Constants
-// Colors
-const BLACK = Color{0x00, 0x00, 0x00, 0xFF};
-const RED   = Color{0xFF, 0x00, 0x00, 0xFF};
-const GREEN = Color{0x00, 0xFF, 0x00, 0xFF};
-const BLUE  = Color{0x00, 0x00, 0xFF, 0xFF};
-
 // Matrices
 var main_cube_rot = id;
 
@@ -207,19 +201,10 @@ fn mattrimul(mat: mat33f32, tri : Triangle) Triangle {
     return Triangle{.p1 = p1, .p2 = p2, .p3 = p3, .color = tri.color};
 }
 
-// TODO: Adjust these colors.
-const LIGHTGREEN = Color{0x47, 0x77, 0x54, 255};
-const DARKGREEN  = Color{0x21, 0x3b, 0x25, 255};
-const LIGHTBLUE  = Color{0xc0, 0xd1, 0xcc, 255};
-const GRAYBLUE   = Color{0x65, 0x73, 0x8c, 255};
-const BROWN      = Color{0x77, 0x5c, 0x4f, 255};
-const YELLOW2    = Color{0xf5, 0xcf, 0x13, 255};
-
-const MAGENTA = Color{0xFF, 0x00, 0xFF, 0xFF};
-const DEBUG = MAGENTA;
-
-const BLACK2     = Color{0x17, 0x0e, 0x19, 255};
-const WHITE      = Color{0xFF, 0xFF, 0xFF, 255};
+const YELLOW  = Color{0xf5, 0xcf, 0x13, 255};
+const DEBUG   = Color{0xFF, 0x00, 0xFF, 0xFF};
+const BLACK   = Color{0x00, 0x00, 0x00, 0xFF};
+const WHITE   = Color{0xFF, 0xFF, 0xFF, 255};
 
 // Window
 const initial_screen_width  = 1080;
@@ -277,6 +262,9 @@ pub fn main() anyerror!void {
 
         // @floatFromInt doesn't work on vectors in Zig v.0.11.0, this has been fixed in v.0.12.dev
         cube_posf32 = Vec3{@floatFromInt(cube_pos[0]), @floatFromInt(cube_pos[1]), @floatFromInt(cube_pos[2])};
+
+        // Add in 0.5 offset, so that the center of the cube is not actually the origin.
+        cube_posf32 += Vec3{0.5, 0.5, 0.5};
 
         // TODO... Put this code somewhere sensible.
         // Depending on the animation_fraction, offset the position of the cube.
@@ -376,16 +364,10 @@ fn render() void {
     // Draw a grid.
     rl.DrawGrid(10, 1);
 
-
     const final_cube_rotation = mat33i8_to_mat33f32(main_cube_rot);
     const cube_rotation = matmulf32(animation_matrix, final_cube_rotation);
 
-    render_cube(cube1, cube_posf32, cube_rotation);
-
-    // @debug
-    render_cube(red_cube, UNITX, mat33i8_to_mat33f32(id));
-    render_cube(green_cube, UNITY, mat33i8_to_mat33f32(id));
-    render_cube(blue_cube, UNITZ, mat33i8_to_mat33f32(id));
+    render_cube(YELLOW, cube_posf32, cube_rotation);
     
     rl.EndMode3D();
 
@@ -414,46 +396,8 @@ fn vec3_to_rl(vec : Vec3) rl.Vector3 {
 //    C4
 //
 // C1 represents the top face of the cube, C2 is pointing "north"
-const Cube = [6] Color;
 
-const cube1 = Cube{
-    YELLOW2,
-    YELLOW2,
-    YELLOW2,
-    YELLOW2,
-    YELLOW2,
-    YELLOW2,
-};
-
-
-const red_cube = Cube{
-    RED,
-    RED,
-    RED,
-    RED,
-    RED,
-    RED,
-};
-
-const green_cube = Cube{
-    GREEN,
-    GREEN,
-    GREEN,
-    GREEN,
-    GREEN,
-    GREEN,
-};
-
-const blue_cube = Cube{
-    BLUE,
-    BLUE,
-    BLUE,
-    BLUE,
-    BLUE,
-    BLUE,
-};
-
-fn render_cube(cube: Cube, pos : Vec3 , rot : mat33f32) void {
+fn render_cube(color : Color, pos : Vec3 , rot : mat33f32) void {
     // Construct triangles for the top of the cube, (and then rotate these
     // around to get other faces).
     const edge_color = WHITE;
@@ -468,8 +412,8 @@ fn render_cube(cube: Cube, pos : Vec3 , rot : mat33f32) void {
     const e10 = Vec3{  1, -1, 1};
     
     // Face triangles.
-    const triangleA = Triangle{.p1 = f00, .p2 = f10, .p3 = f11, .color = DEBUG};
-    const triangleB = Triangle{.p1 = f00, .p2 = f01, .p3 = f11, .color = DEBUG};
+    const triangleA = Triangle{.p1 = f00, .p2 = f10, .p3 = f11, .color = color};
+    const triangleB = Triangle{.p1 = f00, .p2 = f01, .p3 = f11, .color = color};
     // Edge triangles.
     const triangleC = Triangle{.p1 = e00, .p2 = f00, .p3 = e10, .color = edge_color};
     const triangleD = Triangle{.p1 = f00, .p2 = e10, .p3 = f10, .color = edge_color};
@@ -506,9 +450,6 @@ fn render_cube(cube: Cube, pos : Vec3 , rot : mat33f32) void {
         for (top_face_triangles, 0..) |tri, j| {
             cube_triangles[tftn * i + j] = mattrimul(face_rot_mats[i], tri);
         }
-        // Set colors.
-        cube_triangles[tftn * i + 0].color = cube[i];
-        cube_triangles[tftn * i + 1].color = cube[i];
     }
     
     const rot2 = matsclmul(0.5, rot);
