@@ -1,6 +1,6 @@
 // This is simple demo in which a cube rolls on grid, controlled by arrow keys.
 //
-// Created by 10aded Mar 2024 --- Mar 2024.
+// Created by 10aded Mar 2024.
 //
 // This project was compiled using the Zig compiler (version 0.11.0)
 // and built with the command:
@@ -11,7 +11,7 @@
 //
 // The entire source code of this project is available on GitHub at:
 //
-//   https://github.com/10aded/   ???
+//   https://github.com/10aded/Rolling-Cube-Demo
 //
 // and was developed (almost) entirely on the Twitch channel 10aded. Copies of the
 // stream are available on YouTube at the @10aded channel.
@@ -30,7 +30,6 @@ const rl     = @cImport(@cInclude("raylib.h"));
 const sin    = std.math.sin;
 const cos    = std.math.cos;
 const pi     = std.math.pi;
-
 
 const Vec3    = @Vector(3, f32);
 const Vec3Int = @Vector(3, i32);
@@ -70,7 +69,7 @@ const UNITY  = Vec3{0,1,0};
 const UNITZ  = Vec3{0,0,1};
 
 // Animation.
-const ANIMATION_TIME      = 0.2;
+const ANIMATION_TIME = 0.2;
 
 // Colors.
 const BLACK   = Color{0x00, 0x00, 0x00, 0xFF};
@@ -122,8 +121,9 @@ var cube_pos = Vec3Int{0,0,0};
 var cube_posf32 : Vec3 = undefined;
 
 // Animation
-var   animation_type      = ANIMATION_TYPE.UP;
-var   animation_matrix : mat33f32 = undefined;
+var animation_type = ANIMATION_TYPE.UP;
+var animation_matrix : mat33f32 = undefined;
+var stopwatch : std.time.Timer = undefined;
 
 // Keyboard
 var left_key_down             : bool = false;
@@ -161,9 +161,7 @@ fn matzrottheta(t : f32) mat33f32 {
 }
 
 // It doesn't appear that matrix multiplication is in the Zig standard
-// libary, so here are some versions of the common functions.
-
-// Comment: In Zig 0.11.0, there seems to be generics support.
+// libary, so here are some versions of the common linear algebra functions.
 
 // Matrix multiplication, used in our case with T = i8, f32.
 fn matmulT(comptime T : type, mat1 : [3] @Vector(3, T), mat2 : [3] @Vector(3, T)) [3] @Vector(3, T) {
@@ -222,8 +220,6 @@ fn mattrimul(mat: mat33f32, tri : Triangle) Triangle {
     return Triangle{.p1 = p1, .p2 = p2, .p3 = p3, .color = tri.color};
 }
 
-var stopwatch : std.time.Timer = undefined;
-
 pub fn main() anyerror!void {
     // Attempt to make GPU not burn to 100%, maybe doesn't work?
     rl.SetConfigFlags(rl.FLAG_VSYNC_HINT);
@@ -246,9 +242,8 @@ pub fn main() anyerror!void {
     rl.SetTargetFPS(144);
 
     while ( ! rl.WindowShouldClose() ) { // Listen for close button or ESC key.
-
         process_input_update_state();
-        apply_animations();
+        compute_and_apply_animations();
         render();
     }
 }
@@ -298,7 +293,7 @@ fn process_input_update_state() void {
     }
 }
 
-fn apply_animations() void {
+fn compute_and_apply_animations() void {
     // Calculate, as a f32, the number of seconds passed since a arrow key was last pressed.
     // Clamp this time at ANIMATION_TIME.
     const elapsed_time_nano = stopwatch.read();
@@ -372,8 +367,8 @@ fn render() void {
     defer rl.EndDrawing();
 }
 
-
-
+// The procdure which computes a bunch of triangles, which raylib
+// then draws.
 fn render_cube(color : Color, pos : Vec3 , rot : mat33f32) void {
     // Scale the rotation by 1/2.
     const rot2 = matsclmul(0.5, rot);
