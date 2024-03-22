@@ -232,10 +232,10 @@ pub fn main() anyerror!void {
     stopwatch = try std.time.Timer.start();
 
     // Define the camera to look into our 3d world
-    camera.position   = vec3_to_rl(initial_camera_position);
-    camera.target     = vec3_to_rl(ORIGIN);
-    camera.up         = vec3_to_rl(UNITY);
-    camera.fovy       = 45.0;                                // Camera field-of-view Y
+    camera.position = @bitCast(initial_camera_position);
+    camera.target   = @bitCast(ORIGIN);
+    camera.up       = @bitCast(UNITY);
+    camera.fovy     = 45.0;                                // Camera field-of-view Y
     camera.projection = rl.CAMERA_PERSPECTIVE;             // Camera projection type
     
     // Spawn and setup raylib window.    
@@ -353,16 +353,18 @@ fn apply_animations() void {
 fn render() void {
     rl.BeginDrawing();
 
-    rl.ClearBackground(rlc(BLACK));
+    rl.ClearBackground(@bitCast(BLACK));
 
     rl.BeginMode3D(camera);
 
-    // Draw a grid.
     rl.DrawGrid(10, 1);
 
+    // Calculate the overall cube rotation, both from its final position
+    // and the animation rotation.
     const final_cube_rotation = mat33i8_to_mat33f32(main_cube_rot);
     const cube_rotation = matmulT(f32, animation_matrix, final_cube_rotation);
 
+    // Render the cube!
     render_cube(YELLOW, cube_posf32, cube_rotation);
     
     rl.EndMode3D();
@@ -370,40 +372,24 @@ fn render() void {
     defer rl.EndDrawing();
 }
 
-// Convert our color data type to raylib's color data type.
-fn rlc(color : Color) rl.Color {
-    return rl.Color{.r = color[0], .g = color[1], .b = color[2], .a = color[3]};
-}
 
-// Convert our Vector3 data type to raylib's vector data type.
-fn vec3_to_rl(vec : Vec3) rl.Vector3 {
-    const dumb_rl_tl_vec3 = rl.Vector3{
-        .x = vec[0],
-        .y = vec[1],
-        .z = vec[2],
-    };
-    return dumb_rl_tl_vec3;
-}
-
-// In the procedure below,
-//
-//    C2
-//  C5C1C3C6
-//    C4
-//
-// C1 represents the top face of the cube, C2 is pointing "north"
 
 fn render_cube(color : Color, pos : Vec3 , rot : mat33f32) void {
+    // Scale the rotation by 1/2.
+    const rot2 = matsclmul(0.5, rot);
+    
     // Construct triangles for the top of the cube, (and then rotate these
     // around to get other faces).
     const edge_color = WHITE;
     const eps = 0.05; // Epsilon
 
-    // Points.
+    // Points for the face triangles.
     const f00 = Vec3{ -1 + eps, -1 + eps,  1};
     const f01 = Vec3{ -1 + eps,  1 - eps,  1};
     const f10 = Vec3{  1 - eps, -1 + eps,  1};
     const f11 = Vec3{  1 - eps,  1 - eps,  1};
+
+    // Points for the edge triangles.
     const e00 = Vec3{ -1, -1, 1};
     const e10 = Vec3{  1, -1, 1};
     
@@ -447,8 +433,6 @@ fn render_cube(color : Color, pos : Vec3 , rot : mat33f32) void {
             cube_triangles[tftn * i + j] = mattrimul(face_rot_mats[i], tri);
         }
     }
-    
-    const rot2 = matsclmul(0.5, rot);
 
     // Rotate the triangles by rot, and then offset their position.
     for (cube_triangles, 0..) |tri, i| {
@@ -466,9 +450,9 @@ fn render_cube(color : Color, pos : Vec3 , rot : mat33f32) void {
 }
 
 fn draw_triangle(triangle : Triangle) void {
-    const p1 = vec3_to_rl(triangle.p1);
-    const p2 = vec3_to_rl(triangle.p2);
-    const p3 = vec3_to_rl(triangle.p3);
-    rl.DrawTriangle3D(p1, p2, p3, rlc(triangle.color));
-    rl.DrawTriangle3D(p2, p1, p3, rlc(triangle.color));
+    const p1 : rl.Vector3 = @bitCast(triangle.p1);
+    const p2 : rl.Vector3 = @bitCast(triangle.p2);
+    const p3 : rl.Vector3 = @bitCast(triangle.p3);
+    rl.DrawTriangle3D(p1, p2, p3, @bitCast(triangle.color));
+    rl.DrawTriangle3D(p2, p1, p3, @bitCast(triangle.color));
 }
